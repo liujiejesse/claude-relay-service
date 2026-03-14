@@ -34,12 +34,12 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       
-      # 📊 Redis 配置
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # 📊 Redis 配置（Railway 外部 Redis）
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_DB=${REDIS_DB:-0}
-      - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-}
+      - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-true}
       
       # 🎯 Claude API 配置
       - CLAUDE_API_URL=${CLAUDE_API_URL:-https://api.anthropic.com/v1/messages}
@@ -77,33 +77,10 @@ services:
       - DEBUG=${DEBUG:-false}
       - ENABLE_CORS=${ENABLE_CORS:-true}
       - TRUST_PROXY=${TRUST_PROXY:-true}
-    depends_on:
-      - redis
     networks:
       - claude-relay-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # 📊 Redis Database
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    # 仅在容器网络内部暴露端口，不映射到主机
-    expose:
-      - "6379"
-    # 注意：如需本地调试访问，可取消下行注释（生产环境禁用）
-    # ports:
-    #   - "127.0.0.1:${REDIS_PORT:-6379}:6379"
-    volumes:
-      - ./redis_data:/data
-    command: redis-server --save 60 1 --appendonly yes --appendfsync everysec
-    networks:
-      - claude-relay-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -115,9 +92,7 @@ services:
     ports:
       - "127.0.0.1:${REDIS_WEB_PORT:-8081}:8081"
     environment:
-      - REDIS_HOSTS=local:redis:6379
-    depends_on:
-      - redis
+      - REDIS_HOSTS=local:${REDIS_HOST}:${REDIS_PORT:-6379}:0:${REDIS_PASSWORD}
     networks:
       - claude-relay-network
     profiles:
