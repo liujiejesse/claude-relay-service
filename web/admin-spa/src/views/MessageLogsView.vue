@@ -94,7 +94,7 @@
                   <th class="table-th">API Key</th>
                   <th class="table-th">模型</th>
                   <th class="table-th">类型</th>
-                  <th class="table-th">输入</th>
+                  <th class="table-th">总输入</th>
                   <th class="table-th">输出</th>
                   <th class="table-th">费用</th>
                   <th class="table-th">延迟</th>
@@ -133,7 +133,9 @@
                     </span>
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-sm text-blue-600 dark:text-blue-400">
-                    {{ formatNumber(log.inputTokens) }}
+                    {{
+                      formatNumber(log.inputTokens + log.cacheCreateTokens + log.cacheReadTokens)
+                    }}
                   </td>
                   <td
                     class="whitespace-nowrap px-4 py-3 text-sm text-green-600 dark:text-green-400"
@@ -185,7 +187,11 @@
                 </div>
               </div>
               <div class="mt-3 grid grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <div>输入：{{ formatNumber(log.inputTokens) }}</div>
+                <div>
+                  总输入：{{
+                    formatNumber(log.inputTokens + log.cacheCreateTokens + log.cacheReadTokens)
+                  }}
+                </div>
                 <div>输出：{{ formatNumber(log.outputTokens) }}</div>
                 <div class="text-yellow-600 dark:text-yellow-400">
                   费用：{{ formatCost(log.cost) }}
@@ -379,7 +385,11 @@ const metaItems = computed(() => {
     { label: '类型', value: d.isStream ? '流式' : '非流式' },
     { label: '状态码', value: d.statusCode },
     { label: '延迟', value: `${d.latency}ms` },
-    { label: '输入 Token', value: formatNumber(d.inputTokens) },
+    {
+      label: '输入 Token (含缓存)',
+      value: formatNumber(d.inputTokens + d.cacheCreateTokens + d.cacheReadTokens)
+    },
+    { label: '输入 Token (非缓存)', value: formatNumber(d.inputTokens) },
     { label: '输出 Token', value: formatNumber(d.outputTokens) },
     { label: '缓存创建', value: formatNumber(d.cacheCreateTokens) },
     { label: '缓存读取', value: formatNumber(d.cacheReadTokens) },

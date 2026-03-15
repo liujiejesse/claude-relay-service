@@ -1303,41 +1303,66 @@ async function handleMessagesRequest(req, res) {
             nonStreamCosts
           )
 
+          messageLogService
+            .saveLog({
+              apiKeyId: _apiKeyIdNonStream,
+              accountId: response.accountId || '',
+              accountType,
+              model,
+              isStream: false,
+              statusCode: response.statusCode || 200,
+              timestamp: startTime,
+              latency: Date.now() - startTime,
+              inputTokens,
+              outputTokens,
+              cacheCreateTokens,
+              cacheReadTokens,
+              cost: nonStreamCosts?.realCost ?? 0,
+              sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+              clientIp: _clientIp,
+              stopReason: jsonData.stop_reason || '',
+              requestBody: _rawRequestBody,
+              responseContent:
+                jsonData.content
+                  ?.filter((b) => b.type === 'text')
+                  .map((b) => b.text)
+                  .join('') || ''
+            })
+            .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
+
           usageRecorded = true
           logger.api(
             `📊 Non-stream usage recorded (real) - Model: ${model}, Input: ${inputTokens}, Output: ${outputTokens}, Cache Create: ${cacheCreateTokens} (5m: ${ephemeral5mTokens}, 1h: ${ephemeral1hTokens}), Cache Read: ${cacheReadTokens}, Total: ${inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens} tokens`
           )
         } else {
           logger.warn('⚠️ No usage data found in Claude API JSON response')
+          messageLogService
+            .saveLog({
+              apiKeyId: _apiKeyIdNonStream,
+              accountId: response.accountId || '',
+              accountType,
+              model: jsonData.model || _requestBodyNonStream?.model || 'unknown',
+              isStream: false,
+              statusCode: response.statusCode || 200,
+              timestamp: startTime,
+              latency: Date.now() - startTime,
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheCreateTokens: 0,
+              cacheReadTokens: 0,
+              cost: 0,
+              sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+              clientIp: _clientIp,
+              stopReason: jsonData.stop_reason || '',
+              requestBody: _rawRequestBody,
+              responseContent:
+                jsonData.content
+                  ?.filter((b) => b.type === 'text')
+                  .map((b) => b.text)
+                  .join('') || ''
+            })
+            .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
         }
-
-        // 保存消息记录
-        messageLogService
-          .saveLog({
-            apiKeyId: _apiKeyIdNonStream,
-            accountId: response.accountId || '',
-            accountType,
-            model,
-            isStream: false,
-            statusCode: response.statusCode || 200,
-            timestamp: startTime,
-            latency: Date.now() - startTime,
-            inputTokens,
-            outputTokens,
-            cacheCreateTokens,
-            cacheReadTokens,
-            cost: nonStreamCosts?.realCost ?? 0,
-            sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
-            clientIp: _clientIp,
-            stopReason: jsonData.stop_reason || '',
-            requestBody: _rawRequestBody,
-            responseContent:
-              jsonData.content
-                ?.filter((b) => b.type === 'text')
-                .map((b) => b.text)
-                .join('') || ''
-          })
-          .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
 
         // 使用 Express 内建的 res.json() 发送响应（简单可靠）
         res.json(jsonData)
