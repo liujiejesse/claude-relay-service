@@ -27,6 +27,76 @@ router.get('/message-logs', authenticateAdmin, async (req, res) => {
   }
 })
 
+// 导出消息记录（CSV 或 JSON）
+router.get('/message-logs/export', authenticateAdmin, async (req, res) => {
+  try {
+    const { apiKeyId, model, startTime, endTime, keyword, format = 'json', limit } = req.query
+
+    const items = await messageLogService.exportLogs({
+      apiKeyId,
+      model,
+      startTime: startTime ? parseInt(startTime) : undefined,
+      endTime: endTime ? parseInt(endTime) : undefined,
+      keyword,
+      limit: limit ? parseInt(limit) : undefined
+    })
+
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+
+    if (format === 'csv') {
+      const csvFields = [
+        'requestId',
+        'timestamp',
+        'apiKeyId',
+        'accountId',
+        'accountType',
+        'model',
+        'isStream',
+        'statusCode',
+        'latency',
+        'inputTokens',
+        'outputTokens',
+        'cacheCreateTokens',
+        'cacheReadTokens',
+        'cost',
+        'stopReason',
+        'clientIp',
+        'sessionHash',
+        'responseContent',
+        'requestBody'
+      ]
+
+      const escapeCell = (val) => {
+        const str = val === null || val === undefined ? '' : String(val)
+        if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+          return `"${str.replace(/"/g, '""')}"`
+        }
+        return str
+      }
+
+      const rows = [csvFields.join(',')]
+      for (const item of items) {
+        rows.push(csvFields.map((f) => escapeCell(item[f])).join(','))
+      }
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="message-logs-${ts}.csv"`)
+      // UTF-8 BOM，方便 Excel 正确识别中文
+      return res.send('\uFEFF' + rows.join('\r\n'))
+    }
+
+    // JSON 格式
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="message-logs-${ts}.json"`)
+    return res.send(
+      JSON.stringify({ exportedAt: new Date().toISOString(), total: items.length, items }, null, 2)
+    )
+  } catch (error) {
+    logger.error('Failed to export message logs:', error)
+    return res.status(500).json({ error: 'Failed to export message logs', message: error.message })
+  }
+})
+
 // 获取单条完整记录
 router.get('/message-logs/:requestId', authenticateAdmin, async (req, res) => {
   try {

@@ -9,9 +9,17 @@
         <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">LLM 消息日志</h2>
         <p class="text-xs text-gray-500 dark:text-gray-400">记录所有经过中转的 LLM 请求与响应</p>
       </div>
-      <el-button :loading="loading" @click="fetchLogs(1)">
-        <i class="fas fa-sync-alt mr-2" />刷新
-      </el-button>
+      <div class="flex gap-2">
+        <el-button :loading="exporting" @click="doExport('csv')">
+          <i class="fas fa-file-csv mr-2" />导出 CSV
+        </el-button>
+        <el-button :loading="exporting" @click="doExport('json')">
+          <i class="fas fa-file-code mr-2" />导出 JSON
+        </el-button>
+        <el-button :loading="loading" @click="fetchLogs(1)">
+          <i class="fas fa-sync-alt mr-2" />刷新
+        </el-button>
+      </div>
     </div>
 
     <!-- 筛选栏 -->
@@ -329,7 +337,12 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { getMessageLogsApi, getMessageLogDetailApi, deleteMessageLogApi } from '@/utils/http_apis'
+import {
+  getMessageLogsApi,
+  getMessageLogDetailApi,
+  deleteMessageLogApi,
+  exportMessageLogsApi
+} from '@/utils/http_apis'
 import { showToast, formatNumber, formatDate } from '@/utils/tools'
 
 const loading = ref(false)
@@ -355,6 +368,35 @@ const activeDetail = ref(null)
 const deleteVisible = ref(false)
 const deleting = ref(false)
 const pendingDeleteId = ref(null)
+
+const exporting = ref(false)
+
+const doExport = async (format) => {
+  exporting.value = true
+  try {
+    const params = { format }
+    if (filters.apiKeyId) params.apiKeyId = filters.apiKeyId
+    if (filters.model) params.model = filters.model
+    if (filters.keyword) params.keyword = filters.keyword
+    if (filters.dateRange && filters.dateRange.length === 2) {
+      params.startTime = filters.dateRange[0]
+      params.endTime = filters.dateRange[1]
+    }
+    const blob = await exportMessageLogsApi(params)
+    const ext = format === 'csv' ? 'csv' : 'json'
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `message-logs-${ts}.${ext}`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    showToast(`导出失败：${error.message || '未知错误'}`, 'error')
+  } finally {
+    exporting.value = false
+  }
+}
 
 const formatCost = (value) => {
   const num = typeof value === 'number' ? value : parseFloat(value) || 0

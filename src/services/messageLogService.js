@@ -186,6 +186,58 @@ async function queryLogs(options = {}) {
 }
 
 /**
+ * 导出消息记录（不分页，返回所有匹配项含完整字段）
+ * @param {object} options  同 queryLogs，但无 page/pageSize
+ * @param {number} [options.limit]  最大条数，默认 10000
+ * @returns {Promise<object[]>}
+ */
+async function exportLogs(options = {}) {
+  const redis = getRedis()
+  const client = redis.getClientSafe()
+
+  const limit = Math.min(50000, Math.max(1, parseInt(options.limit) || 10000))
+  const startScore = options.startTime || '-inf'
+  const endScore = options.endTime || '+inf'
+
+  let indexKey
+  if (options.apiKeyId) {
+    indexKey = makeKeyIdx(options.apiKeyId)
+  } else if (options.model) {
+    indexKey = makeModelIdx(options.model)
+  } else {
+    indexKey = ALL_IDX
+  }
+
+  const candidates = await client.zrevrangebyscore(indexKey, endScore, startScore)
+  if (candidates.length === 0) return []
+
+  const needModelFilter = options.model && options.apiKeyId
+
+  const pipeline = client.pipeline()
+  for (const id of candidates) {
+    pipeline.hgetall(makeKey(id))
+  }
+  const results = await pipeline.exec()
+
+  const items = []
+  for (let i = 0; i < results.length; i++) {
+    if (items.length >= limit) break
+    const [err, record] = results[i]
+    if (err || !record || !record.requestId) continue
+    if (needModelFilter && record.model !== options.model) continue
+    if (options.keyword) {
+      const kw = options.keyword.toLowerCase()
+      const inResponse = (record.responseContent || '').toLowerCase().includes(kw)
+      const inRequest = (record.requestBody || '').toLowerCase().includes(kw)
+      if (!inResponse && !inRequest) continue
+    }
+    items.push(parseRecord(record, true))
+  }
+
+  return items
+}
+
+/**
  * 获取单条完整记录（含 requestBody 和 responseContent）
  */
 async function getLog(requestId) {
@@ -283,4 +335,4 @@ function parseRecord(record, full = false) {
   return parsed
 }
 
-module.exports = { saveLog, queryLogs, getLog, deleteLog, clearLogsByKey }
+module.exports = { saveLog, queryLogs, exportLogs, getLog, deleteLog, clearLogsByKey }
