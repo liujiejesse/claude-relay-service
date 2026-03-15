@@ -57,7 +57,8 @@ const tabs = computed(() => {
     { key: 'dashboard', name: '仪表板', shortName: '仪表板', icon: 'fas fa-tachometer-alt' },
     { key: 'apiKeys', name: 'API Keys', shortName: 'API', icon: 'fas fa-key' },
     { key: 'accounts', name: '账户管理', shortName: '账户', icon: 'fas fa-user-circle' },
-    { key: 'quotaCards', name: '额度卡', shortName: '额度卡', icon: 'fas fa-ticket-alt' }
+    { key: 'quotaCards', name: '额度卡', shortName: '额度卡', icon: 'fas fa-ticket-alt' },
+    { key: 'messageLogs', name: '消息记录', shortName: '记录', icon: 'fas fa-comments' }
   ]
 
   // 只有在 LDAP 启用时才显示用户管理

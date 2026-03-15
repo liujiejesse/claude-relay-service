@@ -349,3 +349,13 @@ export const getClaudeCodeVersionApi = () =>
   request({ url: '/admin/claude-code-version', method: 'GET' })
 export const clearClaudeCodeVersionApi = () =>
   request({ url: '/admin/claude-code-version/clear', method: 'POST' })
+
+// 消息记录
+export const getMessageLogsApi = (params) =>
+  request({ url: '/admin/message-logs', method: 'GET', params })
+export const getMessageLogDetailApi = (requestId) =>
+  request({ url: `/admin/message-logs/${requestId}`, method: 'GET' })
+export const deleteMessageLogApi = (requestId) =>
+  request({ url: `/admin/message-logs/${requestId}`, method: 'DELETE' })
+export const clearMessageLogsByKeyApi = (apiKeyId) =>
+  request({ url: '/admin/message-logs', method: 'DELETE', params: { apiKeyId } })
