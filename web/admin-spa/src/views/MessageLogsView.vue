@@ -132,9 +132,7 @@
                       {{ log.isStream ? '流式' : '非流式' }}
                     </span>
                   </td>
-                  <td
-                    class="whitespace-nowrap px-4 py-3 text-sm text-blue-600 dark:text-blue-400"
-                  >
+                  <td class="whitespace-nowrap px-4 py-3 text-sm text-blue-600 dark:text-blue-400">
                     {{ formatNumber(log.inputTokens) }}
                   </td>
                   <td
@@ -153,11 +151,7 @@
                   <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
                     <div class="flex items-center justify-end gap-2">
                       <el-button size="small" @click="openDetail(log.requestId)">详情</el-button>
-                      <el-button
-                        size="small"
-                        type="danger"
-                        @click="confirmDelete(log.requestId)"
-                      >
+                      <el-button size="small" type="danger" @click="confirmDelete(log.requestId)">
                         删除
                       </el-button>
                     </div>
