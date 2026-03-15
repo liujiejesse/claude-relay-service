@@ -2498,6 +2498,8 @@ class ClaudeRelayService {
         const allUsageData = [] // 收集所有的usage事件
         let currentUsageData = {} // 当前正在收集的usage数据
         let rateLimitDetected = false // 限流检测标志
+        let collectedResponseText = '' // 收集完整 assistant 文本用于消息日志
+        let collectedStopReason = '' // 收集 stop_reason 用于消息日志
 
         // 监听数据块，解析SSE并寻找usage信息
         // 🧹 内存优化：在闭包创建前提取需要的值，避免闭包捕获 body 和 requestOptions
@@ -2639,6 +2641,16 @@ class ClaudeRelayService {
                     }
                   }
 
+                  // 收集 assistant 文本（用于消息日志）
+                  if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
+                    collectedResponseText += data.delta.text || ''
+                  }
+
+                  // 收集 stop_reason（用于消息日志）
+                  if (data.type === 'message_delta' && data.delta?.stop_reason) {
+                    collectedStopReason = data.delta.stop_reason
+                  }
+
                   // 检查是否有限流错误
                   if (
                     data.type === 'error' &&
@@ -2768,6 +2780,8 @@ class ClaudeRelayService {
 
             // 调用一次usageCallback记录合并后的数据
             if (usageCallback && typeof usageCallback === 'function') {
+              finalUsage.collectedResponseText = collectedResponseText
+              finalUsage.collectedStopReason = collectedStopReason
               usageCallback(finalUsage)
             }
           }

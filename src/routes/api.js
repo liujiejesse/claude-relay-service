@@ -20,6 +20,7 @@ const {
   sendMockWarmupStream
 } = require('../utils/warmupInterceptor')
 const { sanitizeUpstreamError } = require('../utils/errorSanitizer')
+const messageLogService = require('../services/messageLogService')
 const { dumpAnthropicMessagesRequest } = require('../utils/anthropicRequestDump')
 const {
   handleAnthropicMessagesToGemini,
@@ -136,6 +137,8 @@ function isOldSession(body) {
 async function handleMessagesRequest(req, res) {
   try {
     const startTime = Date.now()
+    const _clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || ''
+    const _rawRequestBody = req.body
 
     const forcedVendor = req._anthropicVendor || null
     const requiredService =
@@ -538,6 +541,28 @@ async function handleMessagesRequest(req, res) {
               logger.api(
                 `📊 Stream usage recorded (real) - Model: ${model}, Input: ${inputTokens}, Output: ${outputTokens}, Cache Create: ${cacheCreateTokens}, Cache Read: ${cacheReadTokens}, Total: ${inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens} tokens`
               )
+
+              messageLogService
+                .saveLog({
+                  apiKeyId: _apiKeyId,
+                  accountId: usageAccountId,
+                  accountType,
+                  model,
+                  isStream: true,
+                  statusCode: 200,
+                  timestamp: startTime,
+                  latency: Date.now() - startTime,
+                  inputTokens,
+                  outputTokens,
+                  cacheCreateTokens,
+                  cacheReadTokens,
+                  sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+                  clientIp: _clientIp,
+                  stopReason: usageData.collectedStopReason || '',
+                  requestBody: _rawRequestBody,
+                  responseContent: usageData.collectedResponseText || ''
+                })
+                .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
             } else {
               logger.warn(
                 '⚠️ Usage callback triggered but data is incomplete:',
@@ -1285,6 +1310,33 @@ async function handleMessagesRequest(req, res) {
         } else {
           logger.warn('⚠️ No usage data found in Claude API JSON response')
         }
+
+        // 保存消息记录
+        messageLogService
+          .saveLog({
+            apiKeyId: _apiKeyIdNonStream,
+            accountId: response.accountId || '',
+            accountType,
+            model,
+            isStream: false,
+            statusCode: response.statusCode || 200,
+            timestamp: startTime,
+            latency: Date.now() - startTime,
+            inputTokens: jsonData.usage?.input_tokens || 0,
+            outputTokens: jsonData.usage?.output_tokens || 0,
+            cacheCreateTokens: jsonData.usage?.cache_creation_input_tokens || 0,
+            cacheReadTokens: jsonData.usage?.cache_read_input_tokens || 0,
+            sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+            clientIp: _clientIp,
+            stopReason: jsonData.stop_reason || '',
+            requestBody: _rawRequestBody,
+            responseContent:
+              jsonData.content
+                ?.filter((b) => b.type === 'text')
+                .map((b) => b.text)
+                .join('') || ''
+          })
+          .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
 
         // 使用 Express 内建的 res.json() 发送响应（简单可靠）
         res.json(jsonData)
