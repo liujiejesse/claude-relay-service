@@ -518,6 +518,28 @@ async function handleMessagesRequest(req, res) {
                     accountType,
                     costs
                   )
+                  messageLogService
+                    .saveLog({
+                      apiKeyId: _apiKeyId,
+                      accountId: usageAccountId,
+                      accountType,
+                      model,
+                      isStream: true,
+                      statusCode: 200,
+                      timestamp: startTime,
+                      latency: Date.now() - startTime,
+                      inputTokens,
+                      outputTokens,
+                      cacheCreateTokens,
+                      cacheReadTokens,
+                      cost: costs?.realCost ?? 0,
+                      sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+                      clientIp: _clientIp,
+                      stopReason: usageData.collectedStopReason || '',
+                      requestBody: _rawRequestBody,
+                      responseContent: usageData.collectedResponseText || ''
+                    })
+                    .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
                 })
                 .catch((error) => {
                   logger.error('❌ Failed to record stream usage:', error)
@@ -541,28 +563,6 @@ async function handleMessagesRequest(req, res) {
               logger.api(
                 `📊 Stream usage recorded (real) - Model: ${model}, Input: ${inputTokens}, Output: ${outputTokens}, Cache Create: ${cacheCreateTokens}, Cache Read: ${cacheReadTokens}, Total: ${inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens} tokens`
               )
-
-              messageLogService
-                .saveLog({
-                  apiKeyId: _apiKeyId,
-                  accountId: usageAccountId,
-                  accountType,
-                  model,
-                  isStream: true,
-                  statusCode: 200,
-                  timestamp: startTime,
-                  latency: Date.now() - startTime,
-                  inputTokens,
-                  outputTokens,
-                  cacheCreateTokens,
-                  cacheReadTokens,
-                  sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
-                  clientIp: _clientIp,
-                  stopReason: usageData.collectedStopReason || '',
-                  requestBody: _rawRequestBody,
-                  responseContent: usageData.collectedResponseText || ''
-                })
-                .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
             } else {
               logger.warn(
                 '⚠️ Usage callback triggered but data is incomplete:',
@@ -1322,10 +1322,11 @@ async function handleMessagesRequest(req, res) {
             statusCode: response.statusCode || 200,
             timestamp: startTime,
             latency: Date.now() - startTime,
-            inputTokens: jsonData.usage?.input_tokens || 0,
-            outputTokens: jsonData.usage?.output_tokens || 0,
-            cacheCreateTokens: jsonData.usage?.cache_creation_input_tokens || 0,
-            cacheReadTokens: jsonData.usage?.cache_read_input_tokens || 0,
+            inputTokens,
+            outputTokens,
+            cacheCreateTokens,
+            cacheReadTokens,
+            cost: nonStreamCosts?.realCost ?? 0,
             sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
             clientIp: _clientIp,
             stopReason: jsonData.stop_reason || '',
