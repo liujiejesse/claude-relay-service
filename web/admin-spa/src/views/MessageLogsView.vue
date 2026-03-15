@@ -236,6 +236,39 @@
           </div>
         </div>
 
+        <!-- 对话消息 -->
+        <div v-if="parsedMessages.length > 0">
+          <p class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+            对话消息（{{ parsedMessages.length }} 条）
+          </p>
+          <div class="max-h-[400px] space-y-2 overflow-auto">
+            <div
+              v-for="(msg, idx) in parsedMessages"
+              :key="idx"
+              class="rounded-lg p-3 text-sm"
+              :class="
+                msg.role === 'user'
+                  ? 'bg-blue-50 dark:bg-blue-900/20'
+                  : 'bg-gray-50 dark:bg-gray-800'
+              "
+            >
+              <p
+                class="mb-1 text-xs font-semibold uppercase"
+                :class="
+                  msg.role === 'user'
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                "
+              >
+                {{ msg.role }}
+              </p>
+              <pre class="whitespace-pre-wrap text-xs text-gray-800 dark:text-gray-200">{{
+                getMessageText(msg.content)
+              }}</pre>
+            </div>
+          </div>
+        </div>
+
         <!-- 请求体 -->
         <div>
           <p class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">请求体</p>
@@ -313,6 +346,27 @@ const formatJson = (str) => {
   } catch {
     return str
   }
+}
+
+const parsedMessages = computed(() => {
+  if (!activeDetail.value?.requestBody) return []
+  try {
+    const body = JSON.parse(activeDetail.value.requestBody)
+    return Array.isArray(body.messages) ? body.messages : []
+  } catch {
+    return []
+  }
+})
+
+const getMessageText = (content) => {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+  }
+  return ''
 }
 
 const metaItems = computed(() => {
