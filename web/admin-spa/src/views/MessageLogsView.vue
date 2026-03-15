@@ -96,6 +96,8 @@
                   <th class="table-th">类型</th>
                   <th class="table-th">总输入</th>
                   <th class="table-th">输出</th>
+                  <th class="table-th">缓存创建</th>
+                  <th class="table-th">缓存读取</th>
                   <th class="table-th">费用</th>
                   <th class="table-th">延迟</th>
                   <th class="table-th text-right">操作</th>
@@ -141,6 +143,16 @@
                     class="whitespace-nowrap px-4 py-3 text-sm text-green-600 dark:text-green-400"
                   >
                     {{ formatNumber(log.outputTokens) }}
+                  </td>
+                  <td
+                    class="whitespace-nowrap px-4 py-3 text-sm text-purple-600 dark:text-purple-400"
+                  >
+                    {{ formatNumber(log.cacheCreateTokens) }}
+                  </td>
+                  <td
+                    class="whitespace-nowrap px-4 py-3 text-sm text-indigo-600 dark:text-indigo-400"
+                  >
+                    {{ formatNumber(log.cacheReadTokens) }}
                   </td>
                   <td
                     class="whitespace-nowrap px-4 py-3 text-sm text-yellow-600 dark:text-yellow-400"
@@ -193,6 +205,12 @@
                   }}
                 </div>
                 <div>输出：{{ formatNumber(log.outputTokens) }}</div>
+                <div class="text-purple-600 dark:text-purple-400">
+                  缓存创建：{{ formatNumber(log.cacheCreateTokens) }}
+                </div>
+                <div class="text-indigo-600 dark:text-indigo-400">
+                  缓存读取：{{ formatNumber(log.cacheReadTokens) }}
+                </div>
                 <div class="text-yellow-600 dark:text-yellow-400">
                   费用：{{ formatCost(log.cost) }}
                 </div>
