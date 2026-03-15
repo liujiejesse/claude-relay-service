@@ -62,9 +62,7 @@
         <el-button type="primary" @click="handleSearch">
           <i class="fas fa-search mr-2" />搜索
         </el-button>
-        <el-button @click="resetFilters">
-          <i class="fas fa-undo mr-2" />重置
-        </el-button>
+        <el-button @click="resetFilters"> <i class="fas fa-undo mr-2" />重置 </el-button>
       </div>
     </div>
 
@@ -103,8 +101,14 @@
                   <th class="table-th text-right">操作</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-900">
-                <tr v-for="log in logs" :key="log.requestId" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <tbody
+                class="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-900"
+              >
+                <tr
+                  v-for="log in logs"
+                  :key="log.requestId"
+                  class="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                >
                   <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-800 dark:text-gray-100">
                     {{ formatDate(log.timestamp) }}
                   </td>
@@ -118,21 +122,29 @@
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-sm">
                     <span
-                      :class="log.isStream
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'"
                       class="rounded px-2 py-0.5 text-xs font-medium"
+                      :class="
+                        log.isStream
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                      "
                     >
                       {{ log.isStream ? '流式' : '非流式' }}
                     </span>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-3 text-sm text-blue-600 dark:text-blue-400">
+                  <td
+                    class="whitespace-nowrap px-4 py-3 text-sm text-blue-600 dark:text-blue-400"
+                  >
                     {{ formatNumber(log.inputTokens) }}
                   </td>
-                  <td class="whitespace-nowrap px-4 py-3 text-sm text-green-600 dark:text-green-400">
+                  <td
+                    class="whitespace-nowrap px-4 py-3 text-sm text-green-600 dark:text-green-400"
+                  >
                     {{ formatNumber(log.outputTokens) }}
                   </td>
-                  <td class="whitespace-nowrap px-4 py-3 text-sm text-yellow-600 dark:text-yellow-400">
+                  <td
+                    class="whitespace-nowrap px-4 py-3 text-sm text-yellow-600 dark:text-yellow-400"
+                  >
                     {{ formatCost(log.cost) }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
@@ -141,7 +153,11 @@
                   <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
                     <div class="flex items-center justify-end gap-2">
                       <el-button size="small" @click="openDetail(log.requestId)">详情</el-button>
-                      <el-button size="small" type="danger" @click="confirmDelete(log.requestId)">
+                      <el-button
+                        size="small"
+                        type="danger"
+                        @click="confirmDelete(log.requestId)"
+                      >
                         删除
                       </el-button>
                     </div>
@@ -231,7 +247,8 @@
           <p class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">请求体</p>
           <pre
             class="max-h-[300px] overflow-auto rounded-lg bg-gray-50 p-4 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-          >{{ formatJson(activeDetail.requestBody) }}</pre>
+            >{{ formatJson(activeDetail.requestBody) }}</pre
+          >
         </div>
 
         <!-- 响应内容 -->
@@ -239,7 +256,8 @@
           <p class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">响应内容</p>
           <pre
             class="max-h-[400px] overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-xs text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-          >{{ activeDetail.responseContent || '（无内容）' }}</pre>
+            >{{ activeDetail.responseContent || '（无内容）' }}</pre
+          >
         </div>
       </div>
       <template #footer>
@@ -259,12 +277,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import {
-  getMessageLogsApi,
-  getMessageLogDetailApi,
-  deleteMessageLogApi
-} from '@/utils/http_apis'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { getMessageLogsApi, getMessageLogDetailApi, deleteMessageLogApi } from '@/utils/http_apis'
 import { showToast, formatNumber, formatDate } from '@/utils/tools'
 
 const loading = ref(false)
