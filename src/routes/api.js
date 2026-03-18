@@ -672,6 +672,28 @@ async function handleMessagesRequest(req, res) {
                     accountType,
                     costs
                   )
+                  messageLogService
+                    .saveLog({
+                      apiKeyId: _apiKeyIdConsole,
+                      accountId: usageAccountId,
+                      accountType,
+                      model,
+                      isStream: true,
+                      statusCode: 200,
+                      timestamp: startTime,
+                      latency: Date.now() - startTime,
+                      inputTokens,
+                      outputTokens,
+                      cacheCreateTokens,
+                      cacheReadTokens,
+                      cost: costs?.realCost ?? 0,
+                      sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+                      clientIp: _clientIp,
+                      stopReason: usageData.collectedStopReason || '',
+                      requestBody: _rawRequestBody,
+                      responseContent: usageData.collectedResponseText || ''
+                    })
+                    .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
                 })
                 .catch((error) => {
                   logger.error('❌ Failed to record stream usage:', error)
