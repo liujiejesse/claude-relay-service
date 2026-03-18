@@ -100,6 +100,7 @@
                 <tr>
                   <th class="table-th">时间</th>
                   <th class="table-th">API Key</th>
+                  <th class="table-th">账户</th>
                   <th class="table-th">模型</th>
                   <th class="table-th">类型</th>
                   <th class="table-th">总输入</th>
@@ -123,9 +124,15 @@
                     {{ formatDate(log.timestamp) }}
                   </td>
                   <td class="px-4 py-3 text-sm">
-                    <span class="font-mono text-xs text-gray-600 dark:text-gray-400">
-                      {{ log.apiKeyId ? log.apiKeyId.slice(0, 8) + '...' : '-' }}
-                    </span>
+                    <div class="font-medium text-gray-800 dark:text-gray-100">
+                      {{ log.apiKeyName || '-' }}
+                    </div>
+                    <div class="font-mono text-xs text-gray-400 dark:text-gray-500">
+                      {{ log.apiKeyId ? log.apiKeyId.slice(0, 8) + '...' : '' }}
+                    </div>
+                  </td>
+                  <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-800 dark:text-gray-100">
+                    {{ log.accountName || '-' }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-800 dark:text-gray-100">
                     {{ log.model || '-' }}
@@ -194,6 +201,10 @@
                 <div>
                   <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {{ log.model || '-' }}
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ log.apiKeyName || log.apiKeyId?.slice(0, 8) || '-' }} ·
+                    {{ log.accountName || '-' }}
                   </p>
                   <p class="text-xs text-gray-500 dark:text-gray-400">
                     {{ formatDate(log.timestamp) }}
@@ -441,6 +452,8 @@ const metaItems = computed(() => {
   return [
     { label: '请求 ID', value: d.requestId },
     { label: '时间', value: formatDate(d.timestamp) },
+    { label: 'API Key', value: d.apiKeyName || d.apiKeyId || '-' },
+    { label: '账户', value: d.accountName || d.accountId || '-' },
     { label: '模型', value: d.model || '-' },
     { label: '类型', value: d.isStream ? '流式' : '非流式' },
     { label: '状态码', value: d.statusCode },

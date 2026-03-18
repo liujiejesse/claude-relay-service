@@ -1,6 +1,83 @@
 const { v4: uuidv4 } = require('uuid')
 const logger = require('../utils/logger')
 
+/**
+ * 根据 accountType 推断账户在 Redis 中的 Hash key
+ */
+function accountRedisKey(accountType, accountId) {
+  switch (accountType) {
+    case 'claude-official':
+    case 'claude-console':
+      return `claude:account:${accountId}`
+    case 'ccr':
+      return `ccr_account:${accountId}`
+    case 'bedrock':
+      return `bedrock:account:${accountId}`
+    case 'droid':
+      return `droid:account:${accountId}`
+    case 'openai':
+      return `openai:account:${accountId}`
+    default:
+      return `claude:account:${accountId}`
+  }
+}
+
+/**
+ * 批量查询 apiKeyId → name 和 accountId → name
+ * @param {object[]} items  parseRecord 后的记录数组
+ * @returns {Promise<void>}  直接在 items 上写入 apiKeyName / accountName
+ */
+async function enrichWithNames(items) {
+  if (!items || items.length === 0) return
+
+  const redis = getRedis()
+  const client = redis.getClientSafe()
+  if (!client) return
+
+  // 收集去重后的 keyId 和 accountId
+  const keyIds = [...new Set(items.map((r) => r.apiKeyId).filter(Boolean))]
+  const accountPairs = [
+    ...new Map(
+      items
+        .filter((r) => r.accountId)
+        .map((r) => [
+          `${r.accountType}:${r.accountId}`,
+          { accountType: r.accountType, accountId: r.accountId }
+        ])
+    ).values()
+  ]
+
+  // 批量拉取
+  const pipeline = client.pipeline()
+  for (const keyId of keyIds) {
+    pipeline.hget(`apikey:${keyId}`, 'name')
+  }
+  for (const { accountType, accountId } of accountPairs) {
+    pipeline.hget(accountRedisKey(accountType, accountId), 'name')
+  }
+
+  const results = await pipeline.exec()
+
+  // 建映射表
+  const keyNameMap = {}
+  for (let i = 0; i < keyIds.length; i++) {
+    const [, name] = results[i]
+    if (name) keyNameMap[keyIds[i]] = name
+  }
+
+  const accountNameMap = {}
+  for (let i = 0; i < accountPairs.length; i++) {
+    const [, name] = results[keyIds.length + i]
+    if (name) accountNameMap[accountPairs[i].accountId] = name
+  }
+
+  // 写入每条记录
+  for (const item of items) {
+    item.apiKeyName = keyNameMap[item.apiKeyId] || ''
+    item.accountName = accountNameMap[item.accountId] || ''
+  }
+}
+
 const ENABLED = process.env.MSG_LOG_ENABLED !== 'false'
 
 function getRedis() {
@@ -182,6 +259,7 @@ async function queryLogs(options = {}) {
   const offset = (page - 1) * pageSize
   items = items.slice(offset, offset + pageSize)
 
+  await enrichWithNames(items)
   return { items, total, page, pageSize, totalPages }
 }
 
@@ -234,6 +312,7 @@ async function exportLogs(options = {}) {
     items.push(parseRecord(record, true))
   }
 
+  await enrichWithNames(items)
   return items
 }
 
@@ -245,7 +324,9 @@ async function getLog(requestId) {
   const client = redis.getClientSafe()
   const record = await client.hgetall(makeKey(requestId))
   if (!record || !record.requestId) return null
-  return parseRecord(record, true)
+  const item = parseRecord(record, true)
+  await enrichWithNames([item])
+  return item
 }
 
 /**
