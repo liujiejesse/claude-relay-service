@@ -343,6 +343,19 @@
         <el-button :loading="deleting" type="danger" @click="doDelete">删除</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导出后清理确认弹窗 -->
+    <el-dialog v-model="cleanupVisible" title="清理已导出记录" width="400px">
+      <p class="text-gray-700 dark:text-gray-300">
+        已成功导出
+        <span class="font-semibold text-gray-900 dark:text-gray-100">{{ cleanupIds.length }}</span>
+        条记录。是否同时清理这些记录？此操作不可撤销。
+      </p>
+      <template #footer>
+        <el-button @click="cleanupVisible = false">不清理</el-button>
+        <el-button :loading="cleanupLoading" type="danger" @click="doCleanup">清理</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -352,7 +365,8 @@ import {
   getMessageLogsApi,
   getMessageLogDetailApi,
   deleteMessageLogApi,
-  exportMessageLogsApi
+  exportMessageLogsApi,
+  batchDeleteMessageLogsApi
 } from '@/utils/http_apis'
 import { showToast, formatNumber, formatDate } from '@/utils/tools'
 
@@ -381,6 +395,9 @@ const deleting = ref(false)
 const pendingDeleteId = ref(null)
 
 const exporting = ref(false)
+const cleanupVisible = ref(false)
+const cleanupIds = ref([])
+const cleanupLoading = ref(false)
 
 const doExport = async (format) => {
   exporting.value = true
@@ -402,10 +419,48 @@ const doExport = async (format) => {
     a.download = `message-logs-${ts}.${ext}`
     a.click()
     URL.revokeObjectURL(url)
+
+    // 解析导出内容，提取 requestId 列表
+    const text = await blob.text()
+    let ids = []
+    if (format === 'json') {
+      try {
+        const parsed = JSON.parse(text)
+        ids = (parsed.items || []).map((item) => item.requestId).filter(Boolean)
+      } catch {
+        ids = []
+      }
+    } else {
+      // CSV: 跳过 BOM 和表头行，第一列为 requestId
+      const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
+      for (let i = 1; i < lines.length; i++) {
+        const id = lines[i].split(',')[0]
+        if (id) ids.push(id)
+      }
+    }
+    if (ids.length > 0) {
+      cleanupIds.value = ids
+      cleanupVisible.value = true
+    }
   } catch (error) {
     showToast(`导出失败：${error.message || '未知错误'}`, 'error')
   } finally {
     exporting.value = false
+  }
+}
+
+const doCleanup = async () => {
+  cleanupLoading.value = true
+  try {
+    await batchDeleteMessageLogsApi(cleanupIds.value)
+    showToast(`已清理 ${cleanupIds.value.length} 条记录`, 'success')
+    cleanupVisible.value = false
+    cleanupIds.value = []
+    fetchLogs(1)
+  } catch (error) {
+    showToast(`清理失败：${error.message || '未知错误'}`, 'error')
+  } finally {
+    cleanupLoading.value = false
   }
 }
 

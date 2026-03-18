@@ -361,3 +361,5 @@ export const clearMessageLogsByKeyApi = (apiKeyId) =>
   request({ url: '/admin/message-logs', method: 'DELETE', params: { apiKeyId } })
 export const exportMessageLogsApi = (params) =>
   request({ url: '/admin/message-logs/export', method: 'GET', params, responseType: 'blob' })
+export const batchDeleteMessageLogsApi = (requestIds) =>
+  request({ url: '/admin/message-logs/batch', method: 'DELETE', data: { requestIds } })

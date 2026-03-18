@@ -127,6 +127,25 @@ router.delete('/message-logs/:requestId', authenticateAdmin, async (req, res) =>
   }
 })
 
+// 批量删除记录
+router.delete('/message-logs/batch', authenticateAdmin, async (req, res) => {
+  try {
+    const { requestIds } = req.body
+    if (!Array.isArray(requestIds) || requestIds.length === 0) {
+      return res.status(400).json({ error: 'requestIds must be a non-empty array' })
+    }
+    let deleted = 0
+    for (const requestId of requestIds) {
+      const ok = await messageLogService.deleteLog(requestId)
+      if (ok) deleted++
+    }
+    return res.json({ success: true, data: { deleted } })
+  } catch (error) {
+    logger.error('Failed to batch delete message logs:', error)
+    return res.status(500).json({ error: 'Failed to batch delete message logs', message: error.message })
+  }
+})
+
 // 清除某 API Key 的所有记录
 router.delete('/message-logs', authenticateAdmin, async (req, res) => {
   try {
