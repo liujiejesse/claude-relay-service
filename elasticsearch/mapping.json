@@ -1,0 +1,32 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "requestId": { "type": "keyword" },
+      "apiKeyId": { "type": "keyword" },
+      "apiKeyName": { "type": "keyword" },
+      "accountId": { "type": "keyword" },
+      "accountName": { "type": "keyword" },
+      "accountType": { "type": "keyword" },
+      "model": { "type": "keyword" },
+      "isStream": { "type": "boolean" },
+      "statusCode": { "type": "integer" },
+      "timestamp": { "type": "date" },
+      "latency": { "type": "integer" },
+      "inputTokens": { "type": "integer" },
+      "outputTokens": { "type": "integer" },
+      "cacheCreateTokens": { "type": "integer" },
+      "cacheReadTokens": { "type": "integer" },
+      "cost": { "type": "float" },
+      "sessionHash": { "type": "keyword" },
+      "clientIp": { "type": "keyword" },
+      "stopReason": { "type": "keyword" },
+      "requestBody": { "type": "text", "analyzer": "standard" },
+      "responseContent": { "type": "text", "analyzer": "standard" }
+    }
+  }
+}
