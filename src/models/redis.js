@@ -157,6 +157,16 @@ class RedisClient {
         tls: config.redis.enableTLS ? {} : false
       })
 
+      this.client.on('ready', () => {
+        // 连接就绪后立即关闭 stop-writes-on-bgsave-error，防止 RDB 快照失败时阻断写入
+        this.client
+          .config('SET', 'stop-writes-on-bgsave-error', 'no')
+          .then(() => logger.info('✅ Redis: stop-writes-on-bgsave-error set to no'))
+          .catch((err) =>
+            logger.warn('⚠️ Redis: failed to set stop-writes-on-bgsave-error:', err.message)
+          )
+      })
+
       this.client.on('connect', () => {
         this.isConnected = true
         logger.info('🔗 Redis connected successfully')
