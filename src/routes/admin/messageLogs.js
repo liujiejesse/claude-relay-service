@@ -41,7 +41,17 @@ router.get('/message-logs/export', authenticateAdmin, async (req, res) => {
       limit: limit ? parseInt(limit) : undefined
     })
 
-    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+    const toDateStr = (ts) => new Date(ts).toISOString().slice(0, 10)
+    let timespan
+    if (startTime && endTime) {
+      timespan = `${toDateStr(parseInt(startTime))}~${toDateStr(parseInt(endTime))}`
+    } else if (items.length > 0) {
+      const timestamps = items.map((i) => i.timestamp)
+      timespan = `${toDateStr(Math.min(...timestamps))}~${toDateStr(Math.max(...timestamps))}`
+    } else {
+      timespan = new Date().toISOString().slice(0, 10)
+    }
+    const filename = `message-logs-${timespan}`
 
     if (format === 'csv') {
       const csvFields = [
@@ -80,14 +90,14 @@ router.get('/message-logs/export', authenticateAdmin, async (req, res) => {
       }
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-      res.setHeader('Content-Disposition', `attachment; filename="message-logs-${ts}.csv"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`)
       // UTF-8 BOM，方便 Excel 正确识别中文
       return res.send('\uFEFF' + rows.join('\r\n'))
     }
 
     // JSON 格式
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename="message-logs-${ts}.json"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}.json"`)
     return res.send(
       JSON.stringify({ exportedAt: new Date().toISOString(), total: items.length, items }, null, 2)
     )
