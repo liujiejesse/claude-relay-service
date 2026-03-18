@@ -112,22 +112,7 @@ router.get('/message-logs/:requestId', authenticateAdmin, async (req, res) => {
   }
 })
 
-// 删除单条记录
-router.delete('/message-logs/:requestId', authenticateAdmin, async (req, res) => {
-  try {
-    const { requestId } = req.params
-    const deleted = await messageLogService.deleteLog(requestId)
-    if (!deleted) {
-      return res.status(404).json({ error: 'Not found' })
-    }
-    return res.json({ success: true })
-  } catch (error) {
-    logger.error('Failed to delete message log:', error)
-    return res.status(500).json({ error: 'Failed to delete message log', message: error.message })
-  }
-})
-
-// 批量删除记录
+// 批量删除记录（必须在 /:requestId 之前定义，避免路由冲突）
 router.delete('/message-logs/batch', authenticateAdmin, async (req, res) => {
   try {
     const { requestIds } = req.body
@@ -142,7 +127,24 @@ router.delete('/message-logs/batch', authenticateAdmin, async (req, res) => {
     return res.json({ success: true, data: { deleted } })
   } catch (error) {
     logger.error('Failed to batch delete message logs:', error)
-    return res.status(500).json({ error: 'Failed to batch delete message logs', message: error.message })
+    return res
+      .status(500)
+      .json({ error: 'Failed to batch delete message logs', message: error.message })
+  }
+})
+
+// 删除单条记录
+router.delete('/message-logs/:requestId', authenticateAdmin, async (req, res) => {
+  try {
+    const { requestId } = req.params
+    const deleted = await messageLogService.deleteLog(requestId)
+    if (!deleted) {
+      return res.status(404).json({ error: 'Not found' })
+    }
+    return res.json({ success: true })
+  } catch (error) {
+    logger.error('Failed to delete message log:', error)
+    return res.status(500).json({ error: 'Failed to delete message log', message: error.message })
   }
 })
 
