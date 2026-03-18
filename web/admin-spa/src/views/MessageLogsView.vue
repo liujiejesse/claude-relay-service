@@ -255,7 +255,7 @@
       <div v-if="detailLoading" class="flex justify-center py-8 text-gray-500 dark:text-gray-400">
         <i class="fas fa-spinner fa-spin mr-2" />加载中...
       </div>
-      <div v-else-if="activeDetail" class="space-y-4">
+      <div v-else-if="activeDetail" class="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
         <!-- 元数据 -->
         <div class="grid grid-cols-2 gap-3 text-sm md:grid-cols-3 lg:grid-cols-4">
           <div
