@@ -1137,75 +1137,114 @@ async function handleMessagesRequest(req, res) {
       logger.debug(`[DEBUG] Request URL: ${req.url}`)
       logger.debug(`[DEBUG] Request path: ${req.path}`)
 
-      if (accountType === 'claude-official') {
-        // 官方Claude账号使用原有的转发服务
-        response = await claudeRelayService.relayRequest(
-          _requestBodyNonStream,
-          _apiKeyNonStream,
-          req, // clientRequest 用于断开检测，保留但服务层已优化
-          res,
-          _headersNonStream
-        )
-      } else if (accountType === 'claude-console') {
-        // Claude Console账号使用Console转发服务
-        logger.debug(
-          `[DEBUG] Calling claudeConsoleRelayService.relayRequest with accountId: ${accountId}`
-        )
-        response = await claudeConsoleRelayService.relayRequest(
-          _requestBodyNonStream,
-          _apiKeyNonStream,
-          req, // clientRequest 保留用于断开检测
-          res,
-          _headersNonStream,
-          accountId
-        )
-      } else if (accountType === 'bedrock') {
-        // Bedrock账号使用Bedrock转发服务
-        try {
-          const bedrockAccountResult = await bedrockAccountService.getAccount(accountId)
-          if (!bedrockAccountResult.success) {
-            throw new Error('Failed to get Bedrock account details')
-          }
+      // 可重试的上游错误状态码
+      const RETRYABLE_STATUS_CODES = new Set([401, 403, 429, 500, 502, 503, 504, 529])
+      // 有强制账户（会话绑定/专属账户）时不切换账户重试
+      const maxRelayRetries = forcedAccountNonStream
+        ? 0
+        : parseInt(process.env.RELAY_MAX_RETRIES || '2', 10)
 
-          const result = await bedrockRelayService.handleNonStreamRequest(
+      for (let relayAttempt = 0; ; relayAttempt++) {
+        if (accountType === 'claude-official') {
+          // 官方Claude账号使用原有的转发服务（内部自行选账户）
+          response = await claudeRelayService.relayRequest(
             _requestBodyNonStream,
-            bedrockAccountResult.data,
+            _apiKeyNonStream,
+            req, // clientRequest 用于断开检测，保留但服务层已优化
+            res,
             _headersNonStream
           )
-
-          // 构建标准响应格式
-          response = {
-            statusCode: result.success ? 200 : 500,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(result.success ? result.data : { error: result.error }),
+        } else if (accountType === 'claude-console') {
+          // Claude Console账号使用Console转发服务
+          logger.debug(
+            `[DEBUG] Calling claudeConsoleRelayService.relayRequest with accountId: ${accountId}`
+          )
+          response = await claudeConsoleRelayService.relayRequest(
+            _requestBodyNonStream,
+            _apiKeyNonStream,
+            req, // clientRequest 保留用于断开检测
+            res,
+            _headersNonStream,
             accountId
-          }
+          )
+        } else if (accountType === 'bedrock') {
+          // Bedrock账号使用Bedrock转发服务
+          try {
+            const bedrockAccountResult = await bedrockAccountService.getAccount(accountId)
+            if (!bedrockAccountResult.success) {
+              throw new Error('Failed to get Bedrock account details')
+            }
 
-          // 如果成功，添加使用统计到响应数据中
-          if (result.success && result.usage) {
-            const responseData = JSON.parse(response.body)
-            responseData.usage = result.usage
-            response.body = JSON.stringify(responseData)
+            const result = await bedrockRelayService.handleNonStreamRequest(
+              _requestBodyNonStream,
+              bedrockAccountResult.data,
+              _headersNonStream
+            )
+
+            // 构建标准响应格式
+            response = {
+              statusCode: result.success ? 200 : 500,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(result.success ? result.data : { error: result.error }),
+              accountId
+            }
+
+            // 如果成功，添加使用统计到响应数据中
+            if (result.success && result.usage) {
+              const responseData = JSON.parse(response.body)
+              responseData.usage = result.usage
+              response.body = JSON.stringify(responseData)
+            }
+          } catch (error) {
+            logger.error('❌ Bedrock non-stream request failed:', error)
+            response = {
+              statusCode: 500,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ error: 'Bedrock service error', message: error.message }),
+              accountId
+            }
           }
-        } catch (error) {
-          logger.error('❌ Bedrock non-stream request failed:', error)
-          response = {
-            statusCode: 500,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'Bedrock service error', message: error.message }),
+        } else if (accountType === 'ccr') {
+          // CCR账号使用CCR转发服务
+          logger.debug(`[DEBUG] Calling ccrRelayService.relayRequest with accountId: ${accountId}`)
+          response = await ccrRelayService.relayRequest(
+            _requestBodyNonStream,
+            _apiKeyNonStream,
+            req, // clientRequest 保留用于断开检测
+            res,
+            _headersNonStream,
             accountId
+          )
+        }
+
+        // 判断是否需要重试
+        if (relayAttempt >= maxRelayRetries || !RETRYABLE_STATUS_CODES.has(response.statusCode)) {
+          break
+        }
+
+        // 对非 claude-official 类型重新调度账户
+        // （relay service 已将失败账户标记为不可用，调度器会自动跳过）
+        // claude-official 的 relay service 内部自行选账户，直接重试即可
+        if (accountType !== 'claude-official') {
+          try {
+            const retrySelection = await unifiedClaudeScheduler.selectAccountForApiKey(
+              _apiKeyNonStream,
+              sessionHash,
+              requestedModel,
+              null
+            )
+            ;({ accountId, accountType } = retrySelection)
+          } catch (_selectionErr) {
+            logger.warn(
+              `⚠️ No available accounts for retry (attempt ${relayAttempt + 1}), using last response`
+            )
+            break
           }
         }
-      } else if (accountType === 'ccr') {
-        // CCR账号使用CCR转发服务
-        logger.debug(`[DEBUG] Calling ccrRelayService.relayRequest with accountId: ${accountId}`)
-        response = await ccrRelayService.relayRequest(
-          _requestBodyNonStream,
-          _apiKeyNonStream,
-          req, // clientRequest 保留用于断开检测
-          res,
-          _headersNonStream,
-          accountId
+
+        logger.warn(
+          `🔄 Non-stream retry ${relayAttempt + 1}/${maxRelayRetries} due to ` +
+            `${response.statusCode} — next account: ${accountId} (${accountType})`
         )
       }
 

@@ -7,8 +7,9 @@ const logger = require('../utils/logger')
 function accountRedisKey(accountType, accountId) {
   switch (accountType) {
     case 'claude-official':
-    case 'claude-console':
       return `claude:account:${accountId}`
+    case 'claude-console':
+      return `claude_console_account:${accountId}`
     case 'ccr':
       return `ccr_account:${accountId}`
     case 'bedrock':
