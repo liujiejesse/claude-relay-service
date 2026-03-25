@@ -181,11 +181,11 @@ async function sendStreamTestRequest(options) {
             }
           }
           endTest(false, sanitize ? sanitizeErrorMsg(errorMsg) : errorMsg)
-          resolve()
+          resolve({ success: false, statusCode: response.status })
         })
         response.data.on('error', (err) => {
           endTest(false, sanitize ? sanitizeErrorMsg(err.message) : err.message)
-          resolve()
+          resolve({ success: false, statusCode: response.status })
         })
       })
     }
@@ -231,17 +231,18 @@ async function sendStreamTestRequest(options) {
         if (!responseStream.destroyed && !responseStream.writableEnded) {
           endTest(true)
         }
-        resolve()
+        resolve({ success: true, statusCode: 200 })
       })
 
       response.data.on('error', (err) => {
         endTest(false, err.message)
-        resolve()
+        resolve({ success: false, statusCode: 0 })
       })
     })
   } catch (error) {
     logger.error('❌ Stream test request failed:', error.message)
     endTest(false, error.message)
+    return { success: false, statusCode: 0 }
   }
 }
 

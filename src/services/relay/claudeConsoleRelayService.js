@@ -435,15 +435,33 @@ class ClaudeConsoleRelayService {
         accountId
       }
     } catch (error) {
-      // 处理特定错误
+      // AbortError / CanceledError / ERR_CANCELED = 客户端主动断开（AbortController 触发）
       if (
         error.name === 'AbortError' ||
         error.name === 'CanceledError' ||
-        error.code === 'ECONNABORTED' ||
         error.code === 'ERR_CANCELED'
       ) {
         logger.info('Request aborted due to client disconnect')
         throw new Error('Client disconnected')
+      }
+
+      // ECONNABORTED = axios 请求超时（上游未在配置时间内响应）
+      // 标记账户临时不可用，返回 504 以触发 retry 流程
+      if (error.code === 'ECONNABORTED') {
+        logger.warn(
+          `⏱️ Request timeout for Claude Console account ${account?.name || accountId}, marking temporarily unavailable`
+        )
+        await upstreamErrorHelper
+          .markTempUnavailable(accountId, 'claude-console', 504)
+          .catch(() => {})
+        return {
+          statusCode: 504,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: { type: 'timeout', message: 'Upstream request timed out' }
+          }),
+          accountId
+        }
       }
 
       logger.error(
@@ -1490,7 +1508,18 @@ class ClaudeConsoleRelayService {
         requestOptions.authorization = `Bearer ${account.apiKey}`
       }
 
-      await sendStreamTestRequest(requestOptions)
+      const testResult = await sendStreamTestRequest(requestOptions)
+      // 测试失败时，将账户标记为临时不可用，避免真实请求继续路由到此账户
+      if (!testResult?.success) {
+        const upstreamErrorHelper = require('../../utils/upstreamErrorHelper')
+        const statusCode = testResult?.statusCode || 529
+        await upstreamErrorHelper
+          .markTempUnavailable(accountId, 'claude-console', statusCode)
+          .catch(() => {})
+        logger.warn(
+          `⚠️ Account ${accountId} marked temporarily unavailable after connectivity test failure (${statusCode})`
+        )
+      }
     } catch (error) {
       logger.error(`❌ Test account connection failed:`, error)
       if (!responseStream.headersSent) {

@@ -1260,6 +1260,29 @@ async function handleMessagesRequest(req, res) {
         logger.warn(
           `⚠️ Client disconnected before non-stream response could be sent for key: ${req.apiKey?.name || 'unknown'}`
         )
+        // 客户端已断开但 relay 已完成，仍保存消息记录
+        messageLogService
+          .saveLog({
+            apiKeyId: _apiKeyIdNonStream,
+            accountId: response.accountId || accountId || '',
+            accountType,
+            model: _requestBodyNonStream?.model || 'unknown',
+            isStream: false,
+            statusCode: response.statusCode || 0,
+            timestamp: startTime,
+            latency: Date.now() - startTime,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreateTokens: 0,
+            cacheReadTokens: 0,
+            cost: 0,
+            sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+            clientIp: _clientIp,
+            stopReason: 'client_disconnected',
+            requestBody: _rawRequestBody,
+            responseContent: ''
+          })
+          .catch((err) => logger.warn('⚠️ Failed to save message log (disconnected):', err.message))
         return undefined
       }
 
@@ -1430,6 +1453,29 @@ async function handleMessagesRequest(req, res) {
       } catch (parseError) {
         logger.warn('⚠️ Failed to parse Claude API response as JSON:', parseError.message)
         logger.info('📄 Raw response body:', response.body)
+        // 保存消息记录（非 JSON 响应，如超时、网关错误等）
+        messageLogService
+          .saveLog({
+            apiKeyId: _apiKeyIdNonStream,
+            accountId: response.accountId || accountId || '',
+            accountType,
+            model: _requestBodyNonStream?.model || 'unknown',
+            isStream: false,
+            statusCode: response.statusCode || 0,
+            timestamp: startTime,
+            latency: Date.now() - startTime,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreateTokens: 0,
+            cacheReadTokens: 0,
+            cost: 0,
+            sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+            clientIp: _clientIp,
+            stopReason: '',
+            requestBody: _rawRequestBody,
+            responseContent: ''
+          })
+          .catch((err) => logger.warn('⚠️ Failed to save message log (parse error):', err.message))
         // 使用 Express 内建的 res.send() 发送响应（简单可靠）
         res.send(response.body)
       }
