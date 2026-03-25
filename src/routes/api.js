@@ -580,151 +580,226 @@ async function handleMessagesRequest(req, res) {
         const _apiKeyConsole = req.apiKey
         const _headersConsole = req.headers
 
-        await claudeConsoleRelayService.relayStreamRequestWithUsageCapture(
-          _requestBodyConsole,
-          _apiKeyConsole,
-          res,
-          _headersConsole,
-          (usageData) => {
-            // 回调函数：当检测到完整usage数据时记录真实token使用量
-            logger.info(
-              '🎯 Usage callback triggered with complete data:',
-              JSON.stringify(usageData, null, 2)
-            )
+        const maxConsoleStreamRetries = forcedAccount
+          ? 0
+          : parseInt(process.env.RELAY_MAX_RETRIES || '2', 10)
 
-            if (
-              usageData &&
-              usageData.input_tokens !== undefined &&
-              usageData.output_tokens !== undefined
-            ) {
-              const inputTokens = usageData.input_tokens || 0
-              const outputTokens = usageData.output_tokens || 0
-              // 兼容处理：如果有详细的 cache_creation 对象，使用它；否则使用总的 cache_creation_input_tokens
-              let cacheCreateTokens = usageData.cache_creation_input_tokens || 0
-              let ephemeral5mTokens = 0
-              let ephemeral1hTokens = 0
-
-              if (usageData.cache_creation && typeof usageData.cache_creation === 'object') {
-                ephemeral5mTokens = usageData.cache_creation.ephemeral_5m_input_tokens || 0
-                ephemeral1hTokens = usageData.cache_creation.ephemeral_1h_input_tokens || 0
-                // 总的缓存创建 tokens 是两者之和
-                cacheCreateTokens = ephemeral5mTokens + ephemeral1hTokens
-              }
-
-              const cacheReadTokens = usageData.cache_read_input_tokens || 0
-              const model = usageData.model || 'unknown'
-
-              // 记录真实的token使用量（包含模型信息和所有4种token以及账户ID）
-              const usageAccountId = usageData.accountId
-
-              // 构建 usage 对象以传递给 recordUsage
-              const usageObject = {
-                input_tokens: inputTokens,
-                output_tokens: outputTokens,
-                cache_creation_input_tokens: cacheCreateTokens,
-                cache_read_input_tokens: cacheReadTokens
-              }
-              const requestBetaHeader =
-                _headersConsole['anthropic-beta'] ||
-                _headersConsole['Anthropic-Beta'] ||
-                _headersConsole['ANTHROPIC-BETA']
-              if (requestBetaHeader) {
-                usageObject.request_anthropic_beta = requestBetaHeader
-              }
-              if (
-                typeof _requestBodyConsole?.speed === 'string' &&
-                _requestBodyConsole.speed.trim()
-              ) {
-                usageObject.request_speed = _requestBodyConsole.speed.trim().toLowerCase()
-              }
-              if (typeof usageData.speed === 'string' && usageData.speed.trim()) {
-                usageObject.speed = usageData.speed.trim().toLowerCase()
-              }
-
-              // 如果有详细的缓存创建数据，添加到 usage 对象中
-              if (ephemeral5mTokens > 0 || ephemeral1hTokens > 0) {
-                usageObject.cache_creation = {
-                  ephemeral_5m_input_tokens: ephemeral5mTokens,
-                  ephemeral_1h_input_tokens: ephemeral1hTokens
-                }
-              }
-
-              apiKeyService
-                .recordUsageWithDetails(
-                  _apiKeyIdConsole,
-                  usageObject,
-                  model,
-                  usageAccountId,
-                  'claude-console'
+        for (let streamAttempt = 0; ; streamAttempt++) {
+          try {
+            await claudeConsoleRelayService.relayStreamRequestWithUsageCapture(
+              _requestBodyConsole,
+              _apiKeyConsole,
+              res,
+              _headersConsole,
+              (usageData) => {
+                // 回调函数：当检测到完整usage数据时记录真实token使用量
+                logger.info(
+                  '🎯 Usage callback triggered with complete data:',
+                  JSON.stringify(usageData, null, 2)
                 )
-                .then((costs) => {
-                  queueRateLimitUpdate(
-                    _rateLimitInfoConsole,
-                    {
-                      inputTokens,
-                      outputTokens,
-                      cacheCreateTokens,
-                      cacheReadTokens
-                    },
-                    model,
-                    'claude-console-stream',
-                    _apiKeyIdConsole,
-                    accountType,
-                    costs
-                  )
-                  messageLogService
-                    .saveLog({
-                      apiKeyId: _apiKeyIdConsole,
-                      accountId: usageAccountId,
-                      accountType,
-                      model,
-                      isStream: true,
-                      statusCode: 200,
-                      timestamp: startTime,
-                      latency: Date.now() - startTime,
-                      inputTokens,
-                      outputTokens,
-                      cacheCreateTokens,
-                      cacheReadTokens,
-                      cost: costs?.realCost ?? 0,
-                      sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
-                      clientIp: _clientIp,
-                      stopReason: usageData.collectedStopReason || '',
-                      requestBody: _rawRequestBody,
-                      responseContent: usageData.collectedResponseText || ''
-                    })
-                    .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
-                })
-                .catch((error) => {
-                  logger.error('❌ Failed to record stream usage:', error)
-                  queueRateLimitUpdate(
-                    _rateLimitInfoConsole,
-                    {
-                      inputTokens,
-                      outputTokens,
-                      cacheCreateTokens,
-                      cacheReadTokens
-                    },
-                    model,
-                    'claude-console-stream',
-                    _apiKeyIdConsole,
-                    accountType
-                  )
-                })
 
-              usageDataCaptured = true
-              logger.api(
-                `📊 Stream usage recorded (real) - Model: ${model}, Input: ${inputTokens}, Output: ${outputTokens}, Cache Create: ${cacheCreateTokens}, Cache Read: ${cacheReadTokens}, Total: ${inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens} tokens`
-              )
-            } else {
-              logger.warn(
-                '⚠️ Usage callback triggered but data is incomplete:',
-                JSON.stringify(usageData)
-              )
+                if (
+                  usageData &&
+                  usageData.input_tokens !== undefined &&
+                  usageData.output_tokens !== undefined
+                ) {
+                  const inputTokens = usageData.input_tokens || 0
+                  const outputTokens = usageData.output_tokens || 0
+                  // 兼容处理：如果有详细的 cache_creation 对象，使用它；否则使用总的 cache_creation_input_tokens
+                  let cacheCreateTokens = usageData.cache_creation_input_tokens || 0
+                  let ephemeral5mTokens = 0
+                  let ephemeral1hTokens = 0
+
+                  if (usageData.cache_creation && typeof usageData.cache_creation === 'object') {
+                    ephemeral5mTokens = usageData.cache_creation.ephemeral_5m_input_tokens || 0
+                    ephemeral1hTokens = usageData.cache_creation.ephemeral_1h_input_tokens || 0
+                    // 总的缓存创建 tokens 是两者之和
+                    cacheCreateTokens = ephemeral5mTokens + ephemeral1hTokens
+                  }
+
+                  const cacheReadTokens = usageData.cache_read_input_tokens || 0
+                  const model = usageData.model || 'unknown'
+
+                  // 记录真实的token使用量（包含模型信息和所有4种token以及账户ID）
+                  const usageAccountId = usageData.accountId
+
+                  // 构建 usage 对象以传递给 recordUsage
+                  const usageObject = {
+                    input_tokens: inputTokens,
+                    output_tokens: outputTokens,
+                    cache_creation_input_tokens: cacheCreateTokens,
+                    cache_read_input_tokens: cacheReadTokens
+                  }
+                  const requestBetaHeader =
+                    _headersConsole['anthropic-beta'] ||
+                    _headersConsole['Anthropic-Beta'] ||
+                    _headersConsole['ANTHROPIC-BETA']
+                  if (requestBetaHeader) {
+                    usageObject.request_anthropic_beta = requestBetaHeader
+                  }
+                  if (
+                    typeof _requestBodyConsole?.speed === 'string' &&
+                    _requestBodyConsole.speed.trim()
+                  ) {
+                    usageObject.request_speed = _requestBodyConsole.speed.trim().toLowerCase()
+                  }
+                  if (typeof usageData.speed === 'string' && usageData.speed.trim()) {
+                    usageObject.speed = usageData.speed.trim().toLowerCase()
+                  }
+
+                  // 如果有详细的缓存创建数据，添加到 usage 对象中
+                  if (ephemeral5mTokens > 0 || ephemeral1hTokens > 0) {
+                    usageObject.cache_creation = {
+                      ephemeral_5m_input_tokens: ephemeral5mTokens,
+                      ephemeral_1h_input_tokens: ephemeral1hTokens
+                    }
+                  }
+
+                  apiKeyService
+                    .recordUsageWithDetails(
+                      _apiKeyIdConsole,
+                      usageObject,
+                      model,
+                      usageAccountId,
+                      'claude-console'
+                    )
+                    .then((costs) => {
+                      queueRateLimitUpdate(
+                        _rateLimitInfoConsole,
+                        {
+                          inputTokens,
+                          outputTokens,
+                          cacheCreateTokens,
+                          cacheReadTokens
+                        },
+                        model,
+                        'claude-console-stream',
+                        _apiKeyIdConsole,
+                        accountType,
+                        costs
+                      )
+                      messageLogService
+                        .saveLog({
+                          apiKeyId: _apiKeyIdConsole,
+                          accountId: usageAccountId,
+                          accountType,
+                          model,
+                          isStream: true,
+                          statusCode: 200,
+                          timestamp: startTime,
+                          latency: Date.now() - startTime,
+                          inputTokens,
+                          outputTokens,
+                          cacheCreateTokens,
+                          cacheReadTokens,
+                          cost: costs?.realCost ?? 0,
+                          sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+                          clientIp: _clientIp,
+                          stopReason: usageData.collectedStopReason || '',
+                          requestBody: _rawRequestBody,
+                          responseContent: usageData.collectedResponseText || ''
+                        })
+                        .catch((err) => logger.warn('⚠️ Failed to save message log:', err.message))
+                    })
+                    .catch((error) => {
+                      logger.error('❌ Failed to record stream usage:', error)
+                      queueRateLimitUpdate(
+                        _rateLimitInfoConsole,
+                        {
+                          inputTokens,
+                          outputTokens,
+                          cacheCreateTokens,
+                          cacheReadTokens
+                        },
+                        model,
+                        'claude-console-stream',
+                        _apiKeyIdConsole,
+                        accountType
+                      )
+                    })
+
+                  usageDataCaptured = true
+                  logger.api(
+                    `📊 Stream usage recorded (real) - Model: ${model}, Input: ${inputTokens}, Output: ${outputTokens}, Cache Create: ${cacheCreateTokens}, Cache Read: ${cacheReadTokens}, Total: ${inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens} tokens`
+                  )
+                } else {
+                  logger.warn(
+                    '⚠️ Usage callback triggered but data is incomplete:',
+                    JSON.stringify(usageData)
+                  )
+                }
+              },
+              accountId
+            )
+            break // 成功，退出重试循环
+          } catch (streamError) {
+            // 判断是否可重试：UPSTREAM_RETRYABLE + headers 未发送 + 未达上限
+            const canRetryStream =
+              streamError.code === 'UPSTREAM_RETRYABLE' &&
+              !res.headersSent &&
+              streamAttempt < maxConsoleStreamRetries
+
+            if (canRetryStream) {
+              try {
+                const retrySelection = await unifiedClaudeScheduler.selectAccountForApiKey(
+                  _apiKeyConsole,
+                  sessionHash,
+                  requestedModel,
+                  null
+                )
+                ;({ accountId, accountType } = retrySelection)
+                logger.warn(
+                  `🔄 Stream retry ${streamAttempt + 1}/${maxConsoleStreamRetries} due to ` +
+                    `${streamError.statusCode} — next account: ${accountId} (${accountType})`
+                )
+                continue
+              } catch (_selectionErr) {
+                logger.warn(
+                  `⚠️ No available accounts for stream retry (attempt ${streamAttempt + 1})`
+                )
+              }
             }
-          },
-          accountId
-        )
+
+            // 保存失败请求的消息记录
+            messageLogService
+              .saveLog({
+                apiKeyId: _apiKeyIdConsole,
+                accountId: streamError.accountId || accountId || '',
+                accountType,
+                model: _requestBodyConsole?.model || 'unknown',
+                isStream: true,
+                statusCode: streamError.statusCode || 0,
+                timestamp: startTime,
+                latency: Date.now() - startTime,
+                inputTokens: 0,
+                outputTokens: 0,
+                cacheCreateTokens: 0,
+                cacheReadTokens: 0,
+                cost: 0,
+                sessionHash: sessionHelper.generateSessionHash(_rawRequestBody),
+                clientIp: _clientIp,
+                stopReason: 'error',
+                requestBody: _rawRequestBody,
+                responseContent: ''
+              })
+              .catch((err) =>
+                logger.warn('⚠️ Failed to save message log (stream error):', err.message)
+              )
+
+            // 发送错误响应给客户端（如果流还未开始）
+            if (!res.headersSent && streamError.code === 'UPSTREAM_RETRYABLE') {
+              res.status(streamError.statusCode || 500)
+              res.setHeader('Content-Type', 'application/json')
+              res.end(
+                streamError.sanitizedBody ||
+                  JSON.stringify({ error: { type: 'error', message: streamError.message } })
+              )
+              return
+            }
+
+            throw streamError
+          }
+        }
       } else if (accountType === 'bedrock') {
         // Bedrock账号使用Bedrock转发服务
         // 🧹 内存优化：提取需要的值

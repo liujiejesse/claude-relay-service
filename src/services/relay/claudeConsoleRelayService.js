@@ -927,39 +927,41 @@ class ClaudeConsoleRelayService {
                 }
               }
 
-              // 设置响应头
+              // 准备净化后的错误响应体
+              let sanitizedBody
+              try {
+                const fullErrorData = Buffer.concat(errorChunks).toString()
+                const errorJson = JSON.parse(fullErrorData)
+                sanitizedBody = JSON.stringify(sanitizeUpstreamError(errorJson))
+              } catch (_parseError) {
+                sanitizedBody = sanitizeErrorMessage(errorDataForCheck)
+              }
+              logger.error(`🧹 [Stream] [SANITIZED] Error: ${sanitizedBody}`)
+
+              // 可重试的错误码 & 流未开始：不写入 responseStream，reject 由上层 retry
+              const RETRYABLE_STREAM_STATUS = new Set([401, 403, 429, 500, 502, 503, 504, 529])
+              if (RETRYABLE_STREAM_STATUS.has(response.status) && !responseStream.headersSent) {
+                const err = new Error(`Upstream error: ${response.status}`)
+                err.code = 'UPSTREAM_RETRYABLE'
+                err.statusCode = response.status
+                err.accountId = accountId
+                err.sanitizedBody = sanitizedBody
+                reject(err)
+                return
+              }
+
+              // 不可重试 或 流已开始：写入 responseStream
               if (!responseStream.headersSent) {
                 responseStream.writeHead(response.status, {
                   'Content-Type': 'application/json',
                   'Cache-Control': 'no-cache'
                 })
               }
-
-              // 清理并发送错误响应
-              try {
-                const fullErrorData = Buffer.concat(errorChunks).toString()
-                const errorJson = JSON.parse(fullErrorData)
-                const sanitizedError = sanitizeUpstreamError(errorJson)
-
-                // 记录清理后的错误消息（发送给客户端的，完整记录）
-                logger.error(
-                  `🧹 [Stream] [SANITIZED] Error response to client: ${JSON.stringify(sanitizedError)}`
-                )
-
-                if (isStreamWritable(responseStream)) {
-                  responseStream.write(JSON.stringify(sanitizedError))
-                  responseStream.end()
-                }
-              } catch (parseError) {
-                const sanitizedText = sanitizeErrorMessage(errorDataForCheck)
-                logger.error(`🧹 [Stream] [SANITIZED] Error response to client: ${sanitizedText}`)
-
-                if (isStreamWritable(responseStream)) {
-                  responseStream.write(sanitizedText)
-                  responseStream.end()
-                }
+              if (isStreamWritable(responseStream)) {
+                responseStream.write(sanitizedBody)
+                responseStream.end()
               }
-              resolve() // 不抛出异常，正常完成流处理
+              resolve()
             })
 
             return
@@ -1307,7 +1309,36 @@ class ClaudeConsoleRelayService {
             error.message
           )
 
-          // 检查错误状态
+          // 超时/网络错误 & 流未开始：标记账户不可用，不写入 stream，由上层 retry
+          if (!responseStream.headersSent) {
+            if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+              logger.warn(`⏱️ [Stream] Upstream timeout for Claude Console account ${accountId}`)
+              upstreamErrorHelper
+                .markTempUnavailable(accountId, 'claude-console', 504)
+                .catch(() => {})
+              const err = new Error('Upstream request timed out')
+              err.code = 'UPSTREAM_RETRYABLE'
+              err.statusCode = 504
+              err.accountId = accountId
+              reject(err)
+              return
+            }
+
+            // 其他无响应网络错误（DNS 失败、连接拒绝等）
+            if (!error.response) {
+              upstreamErrorHelper
+                .markTempUnavailable(accountId, 'claude-console', 502)
+                .catch(() => {})
+              const err = new Error(`Network error: ${error.message}`)
+              err.code = 'UPSTREAM_RETRYABLE'
+              err.statusCode = 502
+              err.accountId = accountId
+              reject(err)
+              return
+            }
+          }
+
+          // 检查错误状态（有 response 的情况）
           if (error.response) {
             const catchAutoProtectionDisabled =
               account?.disableAutoProtection === true || account?.disableAutoProtection === 'true'
