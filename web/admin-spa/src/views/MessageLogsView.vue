@@ -424,22 +424,24 @@ const doExport = async (format) => {
     a.click()
     URL.revokeObjectURL(url)
 
-    // 解析导出内容，提取 requestId 列表
-    const text = await blob.text()
+    // 解析导出内容，提取 requestId 列表（超过 20MB 则跳过，避免阻塞浏览器）
     let ids = []
-    if (format === 'json') {
-      try {
-        const parsed = JSON.parse(text)
-        ids = (parsed.items || []).map((item) => item.requestId).filter(Boolean)
-      } catch {
-        ids = []
-      }
-    } else {
-      // CSV: 跳过 BOM 和表头行，第一列为 requestId
-      const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
-      for (let i = 1; i < lines.length; i++) {
-        const id = lines[i].split(',')[0]
-        if (id) ids.push(id)
+    if (blob.size < 20 * 1024 * 1024) {
+      const text = await blob.text()
+      if (format === 'json') {
+        try {
+          const parsed = JSON.parse(text)
+          ids = (parsed.items || []).map((item) => item.requestId).filter(Boolean)
+        } catch {
+          ids = []
+        }
+      } else {
+        // CSV: 跳过 BOM 和表头行，第一列为 requestId
+        const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
+        for (let i = 1; i < lines.length; i++) {
+          const id = lines[i].split(',')[0]
+          if (id) ids.push(id)
+        }
       }
     }
     if (ids.length > 0) {
