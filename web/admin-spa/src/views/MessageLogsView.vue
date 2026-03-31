@@ -411,6 +411,10 @@ const doExport = async (format) => {
       params.endTime = filters.dateRange[1]
     }
     const blob = await exportMessageLogsApi(params)
+    if (!(blob instanceof Blob)) {
+      showToast(blob?.message || '导出失败', 'error')
+      return
+    }
     const ext = format === 'csv' ? 'csv' : 'json'
     const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
     const url = URL.createObjectURL(blob)
