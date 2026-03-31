@@ -84,23 +84,25 @@ router.get('/message-logs/export', authenticateAdmin, async (req, res) => {
         return str
       }
 
-      const rows = [csvFields.join(',')]
-      for (const item of items) {
-        rows.push(csvFields.map((f) => escapeCell(item[f])).join(','))
-      }
-
       res.setHeader('Content-Type', 'text/csv; charset=utf-8')
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`)
-      // UTF-8 BOM，方便 Excel 正确识别中文
-      return res.send('\uFEFF' + rows.join('\r\n'))
+      // UTF-8 BOM，方便 Excel 正确识别中文，逐行流式写出避免超大字符串
+      res.write('\uFEFF' + csvFields.join(',') + '\r\n')
+      for (const item of items) {
+        res.write(csvFields.map((f) => escapeCell(item[f])).join(',') + '\r\n')
+      }
+      return res.end()
     }
 
-    // JSON 格式
+    // JSON 格式：流式写出，避免 JSON.stringify 整体超出 V8 字符串长度限制
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('Content-Disposition', `attachment; filename="${filename}.json"`)
-    return res.send(
-      JSON.stringify({ exportedAt: new Date().toISOString(), total: items.length, items }, null, 2)
-    )
+    res.write(`{"exportedAt":"${new Date().toISOString()}","total":${items.length},"items":[`)
+    for (let i = 0; i < items.length; i++) {
+      res.write(JSON.stringify(items[i]))
+      if (i < items.length - 1) res.write(',')
+    }
+    return res.end(']}')
   } catch (error) {
     logger.error('Failed to export message logs:', error)
     return res.status(500).json({ error: 'Failed to export message logs', message: error.message })
