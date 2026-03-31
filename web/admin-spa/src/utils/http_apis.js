@@ -363,3 +363,5 @@ export const exportMessageLogsApi = (params) =>
   request({ url: '/admin/message-logs/export', method: 'GET', params, responseType: 'blob' })
 export const batchDeleteMessageLogsApi = (requestIds) =>
   request({ url: '/admin/message-logs/batch', method: 'DELETE', data: { requestIds } })
+export const deleteMessageLogsByRangeApi = (params) =>
+  request({ url: '/admin/message-logs/by-range', method: 'DELETE', params })

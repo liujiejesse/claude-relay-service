@@ -19,6 +19,9 @@
         <el-button :loading="loading" @click="fetchLogs(1)">
           <i class="fas fa-sync-alt mr-2" />刷新
         </el-button>
+        <el-button :loading="rangeDeleting" type="danger" @click="openRangeDelete">
+          <i class="fas fa-trash-alt mr-2" />清除当前筛选
+        </el-button>
       </div>
     </div>
 
@@ -344,6 +347,31 @@
       </template>
     </el-dialog>
 
+    <!-- 按范围删除确认弹窗 -->
+    <el-dialog v-model="rangeDeleteVisible" title="清除当前筛选记录" width="420px">
+      <p class="text-gray-700 dark:text-gray-300">
+        将删除当前筛选条件下的<span class="font-semibold text-red-600 dark:text-red-400">所有</span
+        >记录，此操作不可撤销。
+      </p>
+      <div
+        class="mt-3 rounded bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+      >
+        <div v-if="filters.dateRange && filters.dateRange.length === 2">
+          时间范围：{{ new Date(filters.dateRange[0]).toLocaleDateString() }} ~
+          {{ new Date(filters.dateRange[1]).toLocaleDateString() }}
+        </div>
+        <div v-else>时间范围：全部</div>
+        <div v-if="filters.apiKeyId">API Key：{{ filters.apiKeyId }}</div>
+        <div v-if="filters.model">模型：{{ filters.model }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="rangeDeleteVisible = false">取消</el-button>
+        <el-button :loading="rangeDeleting" type="danger" @click="doRangeDelete"
+          >确认删除</el-button
+        >
+      </template>
+    </el-dialog>
+
     <!-- 导出后清理确认弹窗 -->
     <el-dialog v-model="cleanupVisible" title="清理已导出记录" width="400px">
       <p class="text-gray-700 dark:text-gray-300">
@@ -366,7 +394,8 @@ import {
   getMessageLogDetailApi,
   deleteMessageLogApi,
   exportMessageLogsApi,
-  batchDeleteMessageLogsApi
+  batchDeleteMessageLogsApi,
+  deleteMessageLogsByRangeApi
 } from '@/utils/http_apis'
 import { showToast, formatNumber, formatDate } from '@/utils/tools'
 
@@ -398,6 +427,33 @@ const exporting = ref(false)
 const cleanupVisible = ref(false)
 const cleanupIds = ref([])
 const cleanupLoading = ref(false)
+
+const rangeDeleteVisible = ref(false)
+const rangeDeleting = ref(false)
+
+const openRangeDelete = () => {
+  rangeDeleteVisible.value = true
+}
+
+const doRangeDelete = async () => {
+  rangeDeleting.value = true
+  try {
+    const params = {}
+    if (filters.apiKeyId) params.apiKeyId = filters.apiKeyId
+    if (filters.dateRange && filters.dateRange.length === 2) {
+      params.startTime = filters.dateRange[0]
+      params.endTime = filters.dateRange[1]
+    }
+    const res = await deleteMessageLogsByRangeApi(params)
+    showToast(`已删除 ${res?.data?.deleted ?? 0} 条记录`, 'success')
+    rangeDeleteVisible.value = false
+    fetchLogs(1)
+  } catch (error) {
+    showToast(`删除失败：${error.message || '未知错误'}`, 'error')
+  } finally {
+    rangeDeleting.value = false
+  }
+}
 
 const doExport = async (format) => {
   exporting.value = true

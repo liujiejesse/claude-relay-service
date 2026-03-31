@@ -417,4 +417,55 @@ function parseRecord(record, full = false) {
   return parsed
 }
 
-module.exports = { saveLog, queryLogs, exportLogs, getLog, deleteLog, clearLogsByKey }
+/**
+ * 按时间范围（及可选 apiKeyId）批量删除记录
+ * @param {object} options
+ * @param {number} [options.startTime]  Unix ms
+ * @param {number} [options.endTime]    Unix ms
+ * @param {string} [options.apiKeyId]
+ * @returns {Promise<number>} 实际删除条数
+ */
+async function deleteLogsByRange(options = {}) {
+  const redis = getRedis()
+  const client = redis.getClientSafe()
+
+  const startScore = options.startTime || '-inf'
+  const endScore = options.endTime || '+inf'
+
+  const indexKey = options.apiKeyId ? makeKeyIdx(options.apiKeyId) : ALL_IDX
+  const ids = await client.zrangebyscore(indexKey, startScore, endScore)
+  if (ids.length === 0) return 0
+
+  // 批量读取各记录，获取 apiKeyId / model / timestamp 用于清理各索引
+  const fetchPipeline = client.pipeline()
+  for (const id of ids) {
+    fetchPipeline.hmget(makeKey(id), 'apiKeyId', 'model', 'timestamp')
+  }
+  const fetched = await fetchPipeline.exec()
+
+  const delPipeline = client.pipeline()
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]
+    const [err, fields] = fetched[i]
+    if (err) continue
+    const [keyId, model, tsStr] = fields || []
+    delPipeline.del(makeKey(id))
+    if (keyId) delPipeline.zrem(makeKeyIdx(keyId), id)
+    if (model) delPipeline.zrem(makeModelIdx(model), id)
+    if (tsStr) delPipeline.zrem(makeDateIdx(dateStr(parseInt(tsStr))), id)
+    delPipeline.zrem(ALL_IDX, id)
+  }
+  await delPipeline.exec()
+
+  return ids.length
+}
+
+module.exports = {
+  saveLog,
+  queryLogs,
+  exportLogs,
+  getLog,
+  deleteLog,
+  clearLogsByKey,
+  deleteLogsByRange
+}
