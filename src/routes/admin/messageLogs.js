@@ -124,7 +124,27 @@ router.get('/message-logs/:requestId', authenticateAdmin, async (req, res) => {
   }
 })
 
-// 批量删除记录（必须在 /:requestId 之前定义，避免路由冲突）
+// 以下固定路径路由必须在 /:requestId 之前定义，避免路由冲突
+
+// 按时间范围批量删除
+router.delete('/message-logs/by-range', authenticateAdmin, async (req, res) => {
+  try {
+    const { startTime, endTime, apiKeyId } = req.query
+    const count = await messageLogService.deleteLogsByRange({
+      startTime: startTime ? parseInt(startTime) : undefined,
+      endTime: endTime ? parseInt(endTime) : undefined,
+      apiKeyId
+    })
+    return res.json({ success: true, data: { deleted: count } })
+  } catch (error) {
+    logger.error('Failed to delete message logs by range:', error)
+    return res
+      .status(500)
+      .json({ error: 'Failed to delete message logs by range', message: error.message })
+  }
+})
+
+// 批量删除记录
 router.delete('/message-logs/batch', authenticateAdmin, async (req, res) => {
   try {
     const { requestIds } = req.body
@@ -172,24 +192,6 @@ router.delete('/message-logs', authenticateAdmin, async (req, res) => {
   } catch (error) {
     logger.error('Failed to clear message logs:', error)
     return res.status(500).json({ error: 'Failed to clear message logs', message: error.message })
-  }
-})
-
-// 按时间范围批量删除
-router.delete('/message-logs/by-range', authenticateAdmin, async (req, res) => {
-  try {
-    const { startTime, endTime, apiKeyId } = req.query
-    const count = await messageLogService.deleteLogsByRange({
-      startTime: startTime ? parseInt(startTime) : undefined,
-      endTime: endTime ? parseInt(endTime) : undefined,
-      apiKeyId
-    })
-    return res.json({ success: true, data: { deleted: count } })
-  } catch (error) {
-    logger.error('Failed to delete message logs by range:', error)
-    return res
-      .status(500)
-      .json({ error: 'Failed to delete message logs by range', message: error.message })
   }
 })
 
